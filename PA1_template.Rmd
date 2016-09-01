@@ -1,25 +1,177 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template"
+author: "Raghav Luthra"
+date: "28 August 2016"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+## Load packages
 
+Loading the required packages:  
 
+``` {r load, message=FALSE , warning=FALSE}
+
+  library(ggplot2)
+  library(lubridate) 
+  library(dplyr)
+  library(gridExtra)
+  
+```
+
+## Reading the file and understanding it
+
+```{r read}
+  activity <- read.csv("activity.csv")
+
+  str(activity)
+  
+  sum(is.na(activity$steps))
+  
+```
+
+As described in introduction, the dataset consists of 3 columns viz. :  
+
+- Date : The date of the experiment
+- Interval : The 5 minute interval's starting point
+- Steps : Number of steps taken in that interval
+
+Also, we see that there are `r sum(is.na(activity$steps))` NA values and the date column is also a factor. So, we need to do something about the NA values and convert factors into proper date formats. However, this will be done later as we progress through all the questions
 
 ## What is mean total number of steps taken per day?
 
+```{r hist_na,fig.width=8}
 
+  ## Subsetting the non-NA values
+  activity_new <- activity[!is.na(activity$steps),]
+
+  ## Converting date into characters to group them
+  activity_new$date <- as.character(activity_new$date)
+
+  ## Finding mean, median and total steps of each day
+  summary_new <- summarise(group_by(activity_new,date), Mean_steps =mean(steps),  Median_steps=median(steps), Sum=sum(steps))
+
+  summary_frame <- as.data.frame(summary_new)
+
+  print(summary_frame)
+  
+  ## Converting them back to date format for plotting purpose
+  summary_frame$date <- as.POSIXct(summary_frame$date)
+   
+  ggplot(data=summary_frame, aes(date,Sum)) + geom_bar(stat = "identity") + xlab("Date") + ylab("Total steps") + ggtitle("Total steps each day from Oct, 2012 to Nov, 2012")
+
+```
 
 ## What is the average daily activity pattern?
 
+```{r daily}
+
+ ## Summarising by each 5 minute interval
+ summary_time <- summarise(group_by(activity_new,interval),Mean_step=mean(steps))
+
+ summary_time <- as.data.frame(summary_time)
+
+ plot(summary_time$interval,summary_time$Mean_step,type = "l",col="brown",lwd=1.5, xlab = "Interval",ylab =   "Mean Step", main = "Time series of mean number of steps")
+  
+```
+
+### Finding the interval with the maximum number of average steps
+
+```{r max}
+
+summary_time[summary_time$Mean_step==max(summary_time$Mean_step),]
+
+```
+
+The maximum number of average steps is 206.17 from time 08:35 AM to 08:40 AM.
+
+## Inputting Missing Values
+
+Here, the NA value for each interval 0,5,10 etc will be replaced by the mean value of steps taken by the human over the entire period of test in that particular interval.
+
+``` {r missing-val}
+
+interval_times <- unique(activity$interval)
+
+n <- length(interval_times)
+
+  for( i in 1 : n)
+  {
+    interval_data <- activity[activity$interval==interval_times[i],]
+    
+    mean_steps <- mean(interval_data$steps, na.rm=T)
+    
+    activity [activity$interval==interval_times[i] & is.na(activity$steps), "steps" ] <- mean_steps
+  }
+
+activity$steps <- round(activity$steps,3)
+
+```
 
 
-## Imputing missing values
+## Finding sum, mean, median number of steps for each day with new values
 
+``` {r s-m-m,fig.width=8}
 
+  activity$date <- as.character(activity$date)
+
+  ## Finding mean, median and total steps of each day with all values
+  summary <- summarise(group_by(activity,date), Mean_steps =mean(steps), Median_steps=median(steps),   Sum=sum(steps))
+
+  summary <- as.data.frame(summary)
+ 
+  print(summary)
+  
+  summary$date <- as.POSIXct(summary$date)
+   
+  ggplot(data=summary, aes(date,Sum)) + geom_bar(stat = "identity") + xlab("Date") + ylab("Total steps") + ggtitle("Total steps each day from Oct, 2012 to Nov, 2012")
+
+```
+
+## Clssifying the dates into weekday or weekend
+
+``` {r weekday-weekend}
+
+  activity$date <- as.POSIXlt(activity$date)
+
+  ## 1: Sunday and 7: Saturday
+  activity$type <- ifelse( wday(activity$date) == 1 | wday(activity$date) == 7 ,"weekend" ,"weekday")
+
+  activity$type <- as.factor(activity$type)
+
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+``` {r time-w, fig.width=8, fig.height=9}
+
+  activity$date <- as.character(activity$date)
+
+  ## Splitting data into weekend and weekday data
+  split_data <- split(activity,activity$type)
+
+  weekday_data <- split_data[[1]]
+
+  weekend_data <- split_data[[2]]
+
+  ## Finding mean steps for each interval on weekdays
+  summary_day <- summarise(group_by(weekday_data,interval), Mean_steps =mean(steps))
+
+  summary_day  <- as.data.frame(summary_day)
+
+  ## Finding mean steps for each interval on weekends
+  summary_end <- summarise(group_by(weekend_data,interval), Mean_steps =mean(steps))
+
+  summary_end  <- as.data.frame(summary_end)
+
+  g1 <- ggplot(data=summary_day,aes(interval,Mean_steps)) + geom_line(colour="blue") + xlab("Interval") + ylab("Mean Step") + ggtitle("Weekday")
+
+  g2 <- ggplot(data=summary_end,aes(interval,Mean_steps)) + geom_line(colour="blue") + xlab("Interval") + ylab("Mean Step") + ggtitle("Weekend")
+
+  ## Plotting them on the same canvas
+  grid.arrange(g1,g2,ncol=1)
+
+```
